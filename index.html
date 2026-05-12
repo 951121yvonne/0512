@@ -1,25 +1,396 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>p5.js + ml5.js 專案</title>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>變臉・京劇臉譜 AR</title>
 
-    <!-- 載入 p5.js 核心庫 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
-    
-    <!-- 載入 ml5.js 機器學習庫 (修正錯誤關鍵) -->
-    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
 
-    <style>
-      body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #90c9eb; }
-      canvas { border: 2px solid #625892; box-shadow: 0 4px 8px rgba(19, 9, 75, 0.2); }
-    </style>
-  </head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
 
-  <body>
-    <!-- 你的程式碼會在這裡執行 -->
-    <script src="sketch.js"></script>
-  </body>
+  <style>
+    :root {
+      --gold:   #c9a84c;
+      --gold2:  #f5d67a;
+      --red:    #9b1a1a;
+      --deep:   #0a0606;
+      --border: #3d2a10;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--deep);
+      overflow: hidden;
+      font-family: 'ZCOOL XiaoWei', serif;
+      color: var(--gold);
+    }
+
+    /* Radial bg */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 50%, #1e0f06 0%, #060303 100%);
+    }
+
+    /* Grid pattern */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      opacity: 0.055;
+      background-image:
+        repeating-linear-gradient(0deg,   transparent, transparent 38px, var(--gold) 38px, var(--gold) 39px),
+        repeating-linear-gradient(60deg,  transparent, transparent 38px, var(--gold) 38px, var(--gold) 39px),
+        repeating-linear-gradient(120deg, transparent, transparent 38px, var(--gold) 38px, var(--gold) 39px);
+    }
+
+    /* ── Corner ornaments ── */
+    .corner {
+      position: fixed; z-index: 8; pointer-events: none;
+      width: 80px; height: 80px;
+    }
+    .corner svg { width: 100%; height: 100%; }
+    .corner.tl { top: 0; left: 0; }
+    .corner.tr { top: 0; right: 0;  transform: scaleX(-1); }
+    .corner.bl { bottom: 0; left: 0;  transform: scaleY(-1); }
+    .corner.br { bottom: 0; right: 0; transform: scale(-1,-1); }
+
+    /* ── Header ── */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 7;
+      height: 54px;
+      background: linear-gradient(180deg, rgba(8,4,4,0.97) 0%, rgba(8,4,4,0.55) 100%);
+      border-bottom: 1px solid rgba(201,168,76,0.22);
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 100px;
+    }
+
+    .header-inner { position: relative; text-align: center; }
+
+    .title-main {
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 1.6rem;
+      letter-spacing: 0.28em;
+      color: var(--gold2);
+      text-shadow: 0 0 20px rgba(201,168,76,0.8), 0 0 50px rgba(201,168,76,0.25);
+      animation: flicker 7s ease-in-out infinite;
+    }
+    .title-sub {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 0.52rem;
+      letter-spacing: 0.3em;
+      color: rgba(201,168,76,0.42);
+      text-transform: uppercase;
+      display: block;
+      margin-top: 1px;
+    }
+
+    /* Flanking lines */
+    .header-line {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      height: 1px; width: 55px;
+      background: linear-gradient(90deg, transparent, rgba(201,168,76,0.5));
+    }
+    .header-line.left  { right: calc(100% + 12px); }
+    .header-line.right { left:  calc(100% + 12px); transform: translateY(-50%) scaleX(-1); }
+
+    @keyframes flicker {
+      0%,100% { opacity:1; }
+      48%     { opacity:0.88; text-shadow: 0 0 8px rgba(201,168,76,0.4); }
+      49%     { opacity:1;   }
+      93%     { opacity:0.92; }
+      94%     { opacity:1;   }
+    }
+
+    /* ── Sketch wrapper ── */
+    #sketch-wrapper {
+      position: fixed; inset: 0; z-index: 2;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #sketch-wrapper canvas {
+      display: block !important;
+      border: none !important;
+      box-shadow: none !important;
+      max-width: 100vw;
+      max-height: 100vh;
+    }
+
+    /* Vignette */
+    #vignette {
+      position: fixed; inset: 0; z-index: 3; pointer-events: none;
+      background: radial-gradient(ellipse 72% 70% at 50% 50%, transparent 52%, rgba(4,1,1,0.88) 100%);
+    }
+
+    /* Scan lines */
+    #scanlines {
+      position: fixed; inset: 0; z-index: 4; pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent, transparent 3px,
+        rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
+      );
+    }
+
+    /* ── Side columns ── */
+    .col {
+      position: fixed; top: 54px; bottom: 40px; z-index: 6;
+      width: 42px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: space-between; padding: 20px 0;
+      pointer-events: none;
+    }
+    .col.left  { left: 0;  border-right: 1px solid rgba(201,168,76,0.1); }
+    .col.right { right: 0; border-left:  1px solid rgba(201,168,76,0.1); }
+
+    .col .glyph {
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 0.92rem;
+      color: rgba(201,168,76,0.22);
+      writing-mode: vertical-rl;
+      letter-spacing: 0.35em;
+    }
+    .col .diam {
+      width: 7px; height: 7px;
+      background: var(--gold); opacity: 0.28;
+      transform: rotate(45deg); flex-shrink: 0;
+    }
+    .col .vline {
+      flex: 1; width: 1px;
+      background: linear-gradient(180deg, transparent, rgba(201,168,76,0.15), transparent);
+    }
+
+    /* ── Watermark ── */
+    #watermark {
+      position: fixed;
+      bottom: 50px; right: 50px;
+      z-index: 9; pointer-events: none;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+    }
+    .wm-id {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      color: rgba(201,168,76,0.48);
+    }
+    .wm-name {
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 1.1rem;
+      letter-spacing: 0.28em;
+      color: rgba(201,168,76,0.62);
+      text-shadow: 0 0 12px rgba(201,168,76,0.22);
+    }
+    .wm-seal {
+      margin-top: 5px;
+      width: 40px; height: 40px;
+      border: 1.5px solid rgba(155,26,26,0.55);
+      border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(155,26,26,0.07);
+      box-shadow: 0 0 10px rgba(155,26,26,0.18);
+    }
+    .wm-seal-text {
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 0.75rem;
+      color: rgba(200,55,55,0.72);
+      writing-mode: vertical-rl;
+      letter-spacing: 0.06em;
+      line-height: 1.15;
+    }
+
+    /* ── Footer ── */
+    #footer {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 7;
+      height: 40px;
+      background: linear-gradient(0deg, rgba(8,4,4,0.97) 0%, rgba(8,4,4,0.4) 100%);
+      border-top: 1px solid rgba(201,168,76,0.18);
+      display: flex; align-items: center; justify-content: center; gap: 48px;
+    }
+    .tip {
+      font-size: 0.68rem;
+      color: rgba(201,168,76,0.38);
+      letter-spacing: 0.1em;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .tip em {
+      font-style: normal;
+      color: rgba(201,168,76,0.7);
+    }
+    .tip-sep {
+      width: 1px; height: 16px;
+      background: rgba(201,168,76,0.15);
+    }
+
+    /* ── Loading screen ── */
+    #loading {
+      position: fixed; inset: 0; z-index: 99;
+      background: #060303;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 20px;
+      transition: opacity 0.9s ease, visibility 0.9s ease;
+    }
+    #loading.hidden { opacity: 0; visibility: hidden; }
+
+    .ld-glyphs {
+      display: flex; gap: 18px;
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 1.9rem;
+      color: rgba(201,168,76,0.16);
+    }
+    .ld-glyphs span { animation: gup 0.5s ease forwards; opacity: 0; }
+    .ld-glyphs span:nth-child(1){animation-delay:0.15s}
+    .ld-glyphs span:nth-child(2){animation-delay:0.35s}
+    .ld-glyphs span:nth-child(3){animation-delay:0.55s}
+    .ld-glyphs span:nth-child(4){animation-delay:0.75s}
+    .ld-glyphs span:nth-child(5){animation-delay:0.95s}
+    @keyframes gup {
+      from { opacity:0; transform:translateY(10px); }
+      to   { opacity:.2; transform:translateY(0); }
+    }
+
+    .ld-title {
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: 3rem; letter-spacing: 0.5em;
+      color: var(--gold2);
+      text-shadow: 0 0 35px rgba(201,168,76,0.65);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity:1; }
+      50%     { opacity:0.7; }
+    }
+    .ld-sub {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 0.62rem; letter-spacing: 0.38em;
+      color: rgba(201,168,76,0.35);
+      text-transform: uppercase;
+    }
+    .ld-track {
+      width: 200px; height: 1.5px;
+      background: rgba(201,168,76,0.1);
+      border-radius: 2px; overflow: hidden; margin-top: 6px;
+    }
+    .ld-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold), var(--gold2));
+      animation: lbar 2.4s ease forwards;
+    }
+    @keyframes lbar {
+      0%   { width:0% }
+      55%  { width:68% }
+      80%  { width:85% }
+      100% { width:100% }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Loading ── -->
+  <div id="loading">
+    <div class="ld-glyphs">
+      <span>京</span><span>劇</span><span>臉</span><span>譜</span><span>藝</span>
+    </div>
+    <div class="ld-title">變　臉</div>
+    <div class="ld-sub">Peking Opera · AR Face Mask</div>
+    <div class="ld-track"><div class="ld-bar"></div></div>
+  </div>
+
+  <!-- ── Corners ── -->
+  <div class="corner tl">
+    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 78 L2 2 L78 2" stroke="#c9a84c" stroke-width="1.5" opacity="0.45"/>
+      <path d="M2 42 L2 2 L42 2" stroke="#c9a84c" stroke-width="0.7" opacity="0.22"/>
+      <circle cx="2" cy="2" r="3" fill="#c9a84c" opacity="0.65"/>
+      <circle cx="2" cy="2" r="7" stroke="#c9a84c" stroke-width="0.5" opacity="0.2"/>
+      <path d="M18 2 L2 18" stroke="#c9a84c" stroke-width="0.5" opacity="0.22"/>
+      <path d="M32 2 L2 32" stroke="#c9a84c" stroke-width="0.35" opacity="0.14"/>
+    </svg>
+  </div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <!-- ── Side columns ── -->
+  <div class="col left">
+    <div class="glyph">京劇臉譜</div>
+    <div class="diam"></div>
+    <div class="vline"></div>
+    <div class="diam"></div>
+    <div class="glyph">變臉藝術</div>
+  </div>
+  <div class="col right">
+    <div class="glyph">手勢切換</div>
+    <div class="diam"></div>
+    <div class="vline"></div>
+    <div class="diam"></div>
+    <div class="glyph">滑動換臉</div>
+  </div>
+
+  <!-- ── Header ── -->
+  <div id="header">
+    <div class="header-inner">
+      <div class="header-line left"></div>
+      <div class="title-main">京劇臉譜 AR 變臉</div>
+      <span class="title-sub">Peking Opera · Face Mask · Augmented Reality</span>
+      <div class="header-line right"></div>
+    </div>
+  </div>
+
+  <!-- ── Canvas ── -->
+  <div id="sketch-wrapper"></div>
+
+  <!-- ── Overlays ── -->
+  <div id="vignette"></div>
+  <div id="scanlines"></div>
+
+  <!-- ── Watermark ── -->
+  <div id="watermark">
+    <div class="wm-id">414730290</div>
+    <div class="wm-name">謝沐珊</div>
+    <div class="wm-seal">
+      <div class="wm-seal-text">沐珊</div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div id="footer">
+    <div class="tip">◀ <em>左右滑動</em> 切換臉譜</div>
+    <div class="tip-sep"></div>
+    <div class="tip"><em>比數字 1–5</em> 切換耳飾</div>
+    <div class="tip-sep"></div>
+    <div class="tip"><em>張嘴・眨眼</em> 即時互動 ▶</div>
+  </div>
+
+  <script>
+    // Clone corner SVG to other 3 corners
+    const svgHTML = document.querySelector('.corner.tl').innerHTML;
+    ['tr','bl','br'].forEach(c => {
+      document.querySelector('.corner.' + c).innerHTML = svgHTML;
+    });
+
+    // Dismiss loading
+    setTimeout(() => {
+      document.getElementById('loading').classList.add('hidden');
+    }, 2600);
+
+    // Move p5 canvas into wrapper (p5 appends to body)
+    const obs = new MutationObserver(() => {
+      const cv = document.querySelector('body > canvas');
+      if (cv) {
+        document.getElementById('sketch-wrapper').appendChild(cv);
+        obs.disconnect();
+      }
+    });
+    obs.observe(document.body, { childList: true });
+  </script>
+
+  <!-- Your sketch -->
+  <script src="sketch.js"></script>
+
+</body>
 </html>
