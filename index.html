@@ -1,18 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>p5.js + ml5.js 專案</title>
 
-    <title>Sketch</title>
+    <!-- 載入 p5.js 核心庫 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+    
+    <!-- 載入 ml5.js 機器學習庫 (修正錯誤關鍵) -->
+    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
 
-    <link rel="stylesheet" type="text/css" href="style.css">
-
-    <script src="libraries/p5.min.js"></script>
-    <script src="libraries/p5.sound.min.js"></script>
+    <style>
+      body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; }
+      canvas { border: 2px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    </style>
   </head>
 
   <body>
+    <!-- 你的程式碼會在這裡執行 -->
     <script src="sketch.js"></script>
   </body>
 </html>
