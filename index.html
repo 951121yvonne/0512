@@ -2,15 +2,16 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>變臉・京劇臉譜 AR</title>
 
+  <!-- 字體引入 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
 
+  <!-- 函式庫 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
   <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
 
   <style>
@@ -24,373 +25,222 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      width: 100%; height: 100%;
-      background: transparent;
+    body {
+      width: 100%; height: 100vh;
+      background-color: #050303;
       overflow: hidden;
       font-family: 'ZCOOL XiaoWei', serif;
       color: var(--gold);
     }
 
-    /* Radial bg */
-    body::before {
-      content: '';
-      position: fixed; inset: 0; z-index: 0;
-      background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(10,5,3,0.12) 0%, rgba(3,1,1,0.15) 100%);
+    /* 裝飾背景層 */
+    #bg-layer {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    }
+    .bg-gradient {
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at center, rgba(20,10,5,0) 0%, rgba(5,2,2,0.8) 100%);
     }
 
-    /* Grid pattern */
-    body::after {
-      content: '';
-      position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      opacity: 0.055;
-      background-image:
-        repeating-linear-gradient(0deg,   transparent, transparent 38px, var(--gold) 38px, var(--gold) 39px),
-        repeating-linear-gradient(60deg,  transparent, transparent 38px, var(--gold) 38px, var(--gold) 39px),
-        repeating-linear-gradient(120deg, transparent, transparent 38px, var(--gold) 38px, var(--gold) 39px);
-    }
-
-    /* ── Corner ornaments ── */
+    /* ── 轉角裝飾 ── */
     .corner {
-      position: fixed; z-index: 8; pointer-events: none;
-      width: 80px; height: 80px;
+      position: fixed; z-index: 10; pointer-events: none;
+      width: clamp(40px, 10vw, 80px); height: clamp(40px, 10vw, 80px);
     }
     .corner svg { width: 100%; height: 100%; }
-    .corner.tl { top: 0; left: 0; }
-    .corner.tr { top: 0; right: 0;  transform: scaleX(-1); }
-    .corner.bl { bottom: 0; left: 0;  transform: scaleY(-1); }
-    .corner.br { bottom: 0; right: 0; transform: scale(-1,-1); }
+    .corner.tl { top: 10px; left: 10px; }
+    .corner.tr { top: 10px; right: 10px; transform: scaleX(-1); }
+    .corner.bl { bottom: 10px; left: 10px; transform: scaleY(-1); }
+    .corner.br { bottom: 10px; right: 10px; transform: scale(-1,-1); }
 
-    /* ── Header ── */
+    /* ── 頁首標題 ── */
     #header {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 7;
-      height: 54px;
-      background: linear-gradient(180deg, rgba(8,4,4,0.72) 0%, rgba(8,4,4,0.28) 100%);
-      border-bottom: 1px solid rgba(201,168,76,0.22);
-      display: flex; align-items: center; justify-content: center;
-      padding: 0 100px;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+      min-height: 60px; padding: 10px 20px;
+      background: linear-gradient(180deg, rgba(8,4,4,0.9) 0%, transparent 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border-bottom: 1px solid rgba(201,168,76,0.15);
     }
-
-    .header-inner { position: relative; text-align: center; }
 
     .title-main {
       font-family: 'Ma Shan Zheng', cursive;
-      font-size: 1.6rem;
-      letter-spacing: 0.28em;
+      font-size: clamp(1.2rem, 5vw, 1.8rem);
+      letter-spacing: 0.2em;
       color: var(--gold2);
-      text-shadow: 0 0 20px rgba(201,168,76,0.8), 0 0 50px rgba(201,168,76,0.25);
-      animation: flicker 7s ease-in-out infinite;
+      text-shadow: 0 0 15px rgba(201,168,76,0.5);
+      white-space: nowrap;
     }
     .title-sub {
       font-family: 'Cinzel Decorative', serif;
-      font-size: 0.52rem;
-      letter-spacing: 0.3em;
-      color: rgba(201,168,76,0.42);
-      text-transform: uppercase;
-      display: block;
-      margin-top: 1px;
-    }
-
-    /* Flanking lines */
-    .header-line {
-      position: absolute; top: 50%; transform: translateY(-50%);
-      height: 1px; width: 55px;
-      background: linear-gradient(90deg, transparent, rgba(201,168,76,0.5));
-    }
-    .header-line.left  { right: calc(100% + 12px); }
-    .header-line.right { left:  calc(100% + 12px); transform: translateY(-50%) scaleX(-1); }
-
-    @keyframes flicker {
-      0%,100% { opacity:1; }
-      48%     { opacity:0.88; text-shadow: 0 0 8px rgba(201,168,76,0.4); }
-      49%     { opacity:1;   }
-      93%     { opacity:0.92; }
-      94%     { opacity:1;   }
-    }
-
-    /* ── Sketch wrapper ── */
-    #sketch-wrapper {
-      position: fixed; inset: 0; z-index: 2;
-      display: flex; align-items: center; justify-content: center;
-    }
-    #sketch-wrapper canvas {
-      display: block !important;
-      border: none !important;
-      box-shadow: none !important;
-      max-width: 100vw;
-      max-height: 100vh;
-    }
-
-    /* Vignette */
-    #vignette {
-      position: fixed; inset: 0; z-index: 3; pointer-events: none;
-      background: radial-gradient(ellipse 72% 70% at 50% 50%, transparent 55%, rgba(4,1,1,0.35) 100%);
-    }
-
-    /* Scan lines */
-    #scanlines {
-      position: fixed; inset: 0; z-index: 4; pointer-events: none;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent, transparent 3px,
-        rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
-      );
-    }
-
-    /* ── Side columns ── */
-    .col {
-      position: fixed; top: 54px; bottom: 40px; z-index: 6;
-      width: 42px;
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: space-between; padding: 20px 0;
-      pointer-events: none;
-    }
-    .col.left  { left: 0;  border-right: 1px solid rgba(201,168,76,0.1); }
-    .col.right { right: 0; border-left:  1px solid rgba(201,168,76,0.1); }
-
-    .col .glyph {
-      font-family: 'Ma Shan Zheng', cursive;
-      font-size: 0.92rem;
-      color: rgba(201,168,76,0.22);
-      writing-mode: vertical-rl;
-      letter-spacing: 0.35em;
-    }
-    .col .diam {
-      width: 7px; height: 7px;
-      background: var(--gold); opacity: 0.28;
-      transform: rotate(45deg); flex-shrink: 0;
-    }
-    .col .vline {
-      flex: 1; width: 1px;
-      background: linear-gradient(180deg, transparent, rgba(201,168,76,0.15), transparent);
-    }
-
-    /* ── Watermark ── */
-    #watermark {
-      position: fixed;
-      bottom: 50px; right: 50px;
-      z-index: 9; pointer-events: none;
-      display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
-    }
-    .wm-id {
-      font-family: 'Cinzel Decorative', serif;
-      font-size: 0.6rem;
+      font-size: clamp(0.4rem, 2vw, 0.6rem);
       letter-spacing: 0.2em;
-      color: rgba(201,168,76,0.48);
-    }
-    .wm-name {
-      font-family: 'Ma Shan Zheng', cursive;
-      font-size: 1.1rem;
-      letter-spacing: 0.28em;
-      color: rgba(201,168,76,0.62);
-      text-shadow: 0 0 12px rgba(201,168,76,0.22);
-    }
-    .wm-seal {
-      margin-top: 5px;
-      width: 40px; height: 40px;
-      border: 1.5px solid rgba(155,26,26,0.55);
-      border-radius: 3px;
-      display: flex; align-items: center; justify-content: center;
-      background: rgba(155,26,26,0.07);
-      box-shadow: 0 0 10px rgba(155,26,26,0.18);
-    }
-    .wm-seal-text {
-      font-family: 'Ma Shan Zheng', cursive;
-      font-size: 0.75rem;
-      color: rgba(200,55,55,0.72);
-      writing-mode: vertical-rl;
-      letter-spacing: 0.06em;
-      line-height: 1.15;
+      opacity: 0.5;
+      margin-top: 4px;
     }
 
-    /* ── Footer ── */
+    /* ── 側邊欄 (電腦端顯示) ── */
+    .col {
+      position: fixed; top: 80px; bottom: 80px; z-index: 15;
+      width: 40px; display: flex; flex-direction: column; 
+      align-items: center; justify-content: space-between;
+      opacity: 0.6; pointer-events: none;
+    }
+    @media (max-width: 768px) { .col { display: none; } } /* 手機隱藏 */
+    
+    .col.left { left: 15px; }
+    .col.right { right: 15px; }
+    .glyph { writing-mode: vertical-rl; letter-spacing: 0.5em; font-size: 0.9rem; }
+    .vline { flex: 1; width: 1px; background: linear-gradient(transparent, var(--gold), transparent); margin: 10px 0; }
+
+    /* ── 頁尾提示資訊 ── */
     #footer {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 7;
-      height: 40px;
-      background: linear-gradient(0deg, rgba(8,4,4,0.65) 0%, rgba(8,4,4,0.2) 100%);
-      border-top: 1px solid rgba(201,168,76,0.18);
-      display: flex; align-items: center; justify-content: center; gap: 48px;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+      padding: 10px;
+      background: linear-gradient(0deg, rgba(8,4,4,0.9) 0%, transparent 100%);
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+      gap: 10px 20px;
+      border-top: 1px solid rgba(201,168,76,0.15);
     }
     .tip {
-      font-size: 0.68rem;
-      color: rgba(201,168,76,0.38);
-      letter-spacing: 0.1em;
-      display: flex; align-items: center; gap: 6px;
+      font-size: clamp(0.6rem, 2.5vw, 0.75rem);
+      color: rgba(201,168,76,0.6);
+      display: flex; align-items: center; gap: 5px;
     }
-    .tip em {
-      font-style: normal;
-      color: rgba(201,168,76,0.7);
-    }
-    .tip-sep {
-      width: 1px; height: 16px;
-      background: rgba(201,168,76,0.15);
+    .tip em { color: var(--gold2); font-style: normal; font-weight: bold; }
+
+    /* ── 畫布容器 ── */
+    #sketch-wrapper {
+      position: absolute; inset: 0; z-index: 5;
+      display: flex; align-items: center; justify-content: center;
     }
 
-    /* ── Loading screen ── */
+    /* ── 水印與印章 ── */
+    #watermark {
+      position: fixed; bottom: 60px; right: 20px; z-index: 25;
+      display: flex; flex-direction: column; align-items: flex-end;
+    }
+    .wm-name { font-family: 'Ma Shan Zheng', cursive; font-size: 1.2rem; margin-bottom: 5px; }
+    .wm-seal {
+      width: 35px; height: 35px; border: 1.5px solid var(--red);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--red); font-size: 0.7rem; font-weight: bold;
+    }
+
+    /* ── 載入中 ── */
     #loading {
-      position: fixed; inset: 0; z-index: 99;
-      background: #060303;
+      position: fixed; inset: 0; z-index: 100; background: #000;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 20px;
-      transition: opacity 0.9s ease, visibility 0.9s ease;
+      transition: opacity 0.8s ease;
     }
-    #loading.hidden { opacity: 0; visibility: hidden; }
-
-    .ld-glyphs {
-      display: flex; gap: 18px;
-      font-family: 'Ma Shan Zheng', cursive;
-      font-size: 1.9rem;
-      color: rgba(201,168,76,0.16);
-    }
-    .ld-glyphs span { animation: gup 0.5s ease forwards; opacity: 0; }
-    .ld-glyphs span:nth-child(1){animation-delay:0.15s}
-    .ld-glyphs span:nth-child(2){animation-delay:0.35s}
-    .ld-glyphs span:nth-child(3){animation-delay:0.55s}
-    .ld-glyphs span:nth-child(4){animation-delay:0.75s}
-    .ld-glyphs span:nth-child(5){animation-delay:0.95s}
-    @keyframes gup {
-      from { opacity:0; transform:translateY(10px); }
-      to   { opacity:.2; transform:translateY(0); }
-    }
-
-    .ld-title {
-      font-family: 'Ma Shan Zheng', cursive;
-      font-size: 3rem; letter-spacing: 0.5em;
-      color: var(--gold2);
-      text-shadow: 0 0 35px rgba(201,168,76,0.65);
-      animation: pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%,100% { opacity:1; }
-      50%     { opacity:0.7; }
-    }
-    .ld-sub {
-      font-family: 'Cinzel Decorative', serif;
-      font-size: 0.62rem; letter-spacing: 0.38em;
-      color: rgba(201,168,76,0.35);
-      text-transform: uppercase;
-    }
-    .ld-track {
-      width: 200px; height: 1.5px;
-      background: rgba(201,168,76,0.1);
-      border-radius: 2px; overflow: hidden; margin-top: 6px;
-    }
-    .ld-bar {
-      height: 100%;
-      background: linear-gradient(90deg, var(--gold), var(--gold2));
-      animation: lbar 2.4s ease forwards;
-    }
-    @keyframes lbar {
-      0%   { width:0% }
-      55%  { width:68% }
-      80%  { width:85% }
-      100% { width:100% }
-    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
   </style>
 </head>
 <body>
 
-  <!-- ── Loading ── -->
   <div id="loading">
-    <div class="ld-glyphs">
-      <span>京</span><span>劇</span><span>臉</span><span>譜</span><span>藝</span>
-    </div>
-    <div class="ld-title">變　臉</div>
-    <div class="ld-sub">Peking Opera · AR Face Mask</div>
-    <div class="ld-track"><div class="ld-bar"></div></div>
+    <h1 style="font-family:'Ma Shan Zheng'; font-size: 3rem; color: var(--gold2);">變臉</h1>
+    <p style="color: var(--gold); letter-spacing: 0.5em;">載入藝術資源中...</p>
   </div>
 
-  <!-- ── Corners ── -->
-  <div class="corner tl">
-    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 78 L2 2 L78 2" stroke="#c9a84c" stroke-width="1.5" opacity="0.45"/>
-      <path d="M2 42 L2 2 L42 2" stroke="#c9a84c" stroke-width="0.7" opacity="0.22"/>
-      <circle cx="2" cy="2" r="3" fill="#c9a84c" opacity="0.65"/>
-      <circle cx="2" cy="2" r="7" stroke="#c9a84c" stroke-width="0.5" opacity="0.2"/>
-      <path d="M18 2 L2 18" stroke="#c9a84c" stroke-width="0.5" opacity="0.22"/>
-      <path d="M32 2 L2 32" stroke="#c9a84c" stroke-width="0.35" opacity="0.14"/>
-    </svg>
-  </div>
-  <div class="corner tr"></div>
-  <div class="corner bl"></div>
-  <div class="corner br"></div>
+  <div id="bg-layer"><div class="bg-gradient"></div></div>
 
-  <!-- ── Side columns ── -->
-  <div class="col left">
-    <div class="glyph">京劇臉譜</div>
-    <div class="diam"></div>
+  <!-- 轉角裝飾 SVG -->
+  <div class="corner tl"><svg viewBox="0 0 80 80" fill="none"><path d="M2 78 L2 2 L78 2" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/></svg></div>
+  <div class="corner tr"><svg viewBox="0 0 80 80" fill="none"><path d="M2 78 L2 2 L78 2" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/></svg></div>
+  <div class="corner bl"><svg viewBox="0 0 80 80" fill="none"><path d="M2 78 L2 2 L78 2" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/></svg></div>
+  <div class="corner br"><svg viewBox="0 0 80 80" fill="none"><path d="M2 78 L2 2 L78 2" stroke="#c9a84c" stroke-width="1.5" opacity="0.6"/></svg></div>
+
+  <header id="header">
+    <div class="title-main">京劇臉譜 AR 變臉</div>
+    <div class="title-sub">PEKING OPERA · AUGMENTED REALITY</div>
+  </header>
+
+  <aside class="col left">
+    <div class="glyph">國粹藝術</div>
     <div class="vline"></div>
-    <div class="diam"></div>
-    <div class="glyph">變臉藝術</div>
-  </div>
-  <div class="col right">
-    <div class="glyph">手勢切換</div>
-    <div class="diam"></div>
+    <div class="glyph">戲曲神韻</div>
+  </aside>
+
+  <aside class="col right">
+    <div class="glyph">手勢感應</div>
     <div class="vline"></div>
-    <div class="diam"></div>
-    <div class="glyph">滑動換臉</div>
-  </div>
+    <div class="glyph">即時換臉</div>
+  </aside>
 
-  <!-- ── Header ── -->
-  <div id="header">
-    <div class="header-inner">
-      <div class="header-line left"></div>
-      <div class="title-main">京劇臉譜 AR 變臉</div>
-      <span class="title-sub">Peking Opera · Face Mask · Augmented Reality</span>
-      <div class="header-line right"></div>
-    </div>
-  </div>
+  <main id="sketch-wrapper"></main>
 
-  <!-- ── Canvas ── -->
-  <div id="sketch-wrapper"></div>
-
-  <!-- ── Overlays ── -->
-  <div id="vignette"></div>
-  <div id="scanlines"></div>
-
-  <!-- ── Watermark ── -->
   <div id="watermark">
-    <div class="wm-id">414730290</div>
     <div class="wm-name">謝沐珊</div>
-    <div class="wm-seal">
-      <div class="wm-seal-text">沐珊</div>
-    </div>
+    <div class="wm-seal">沐珊</div>
   </div>
 
-  <!-- ── Footer ── -->
-  <div id="footer">
+  <footer id="footer">
     <div class="tip">◀ <em>左右滑動</em> 切換臉譜</div>
-    <div class="tip-sep"></div>
-    <div class="tip"><em>比數字 1–5</em> 切換耳飾</div>
-    <div class="tip-sep"></div>
-    <div class="tip"><em>張嘴・眨眼</em> 即時互動 ▶</div>
-  </div>
+    <div class="tip"><em>比數字 1-5</em> 切換配飾</div>
+    <div class="tip"><em>張嘴/眨眼</em> 互動 ▶</div>
+  </footer>
 
   <script>
-    // Clone corner SVG to other 3 corners
-    const svgHTML = document.querySelector('.corner.tl').innerHTML;
-    ['tr','bl','br'].forEach(c => {
-      document.querySelector('.corner.' + c).innerHTML = svgHTML;
-    });
+    // --- p5.js Sketch 邏輯 ---
+    let faceMesh;
+    let video;
+    let faces = [];
+    let options = { maxFaces: 1, refineLandmarks: false, flipHorizontal: true };
 
-    // Dismiss loading
-    setTimeout(() => {
-      document.getElementById('loading').classList.add('hidden');
-    }, 2600);
+    function setup() {
+      const canvas = createCanvas(windowWidth, windowHeight);
+      canvas.parent('sketch-wrapper');
+      
+      video = createCapture(VIDEO);
+      video.size(windowWidth, windowHeight);
+      video.hide();
 
-    // Move p5 canvas into wrapper (p5 appends to body)
-    const obs = new MutationObserver(() => {
-      const cv = document.querySelector('body > canvas');
-      if (cv) {
-        document.getElementById('sketch-wrapper').appendChild(cv);
-        obs.disconnect();
+      faceMesh = ml5.faceMesh(video, options, () => {
+        document.getElementById('loading').classList.add('hidden');
+      });
+      faceMesh.detectStart(video, gotFaces);
+    }
+
+    function gotFaces(results) {
+      faces = results;
+    }
+
+    function draw() {
+      clear();
+      
+      // 繪製視訊鏡像
+      push();
+      translate(width, 0);
+      scale(-1, 1);
+      // 若要隱藏背景只留臉譜，可不畫 video
+      // image(video, 0, 0, width, height); 
+      pop();
+
+      if (faces.length > 0) {
+        let face = faces[0];
+        drawMask(face);
       }
-    });
-    obs.observe(document.body, { childList: true });
+    }
+
+    function drawMask(face) {
+      // 這裡放置你的臉譜繪製邏輯
+      // 使用 face.keypoints 獲取座標
+      noFill();
+      stroke(201, 168, 76, 150);
+      
+      // 範例：畫出臉部輪廓感應點
+      for (let i = 0; i < face.keypoints.length; i += 10) {
+        let p = face.keypoints[i];
+        ellipse(p.x, p.y, 3, 3);
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    // 禁止手機瀏覽器預設下拉刷新
+    document.addEventListener('touchmove', (e) => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
   </script>
-
-  <!-- Your sketch -->
-  <script src="sketch.js"></script>
-
 </body>
 </html>
